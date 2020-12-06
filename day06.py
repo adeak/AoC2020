@@ -4,7 +4,7 @@ def day06(inp):
     groups = inp.split('\n\n')  # one string for each group
     counters = [Counter(line.replace('\n', '').replace(' ', '')) for line in groups]  # char count in each group
 
-    part1 = sum(len(counter.keys()) for counter in counters)
+    part1 = sum(len(counter) for counter in counters)
 
     part2 = 0
     for group, counter in zip(groups, counters):
