@@ -1,17 +1,12 @@
 class Bag:
     def __init__(self, kind, children):
         self.kind = kind
-        self.contains = children
+        self.contents = children
         self.isin = set()
-
-class Node:
-    def __init__(self, kind, parent, count):
-        self.kind = kind
-        self.parent = parent
-        self.count = count
-        self.children = set()
+        self.bag_count = 1
 
 def day07(inp):
+    # parse the input into a dict of bags
     bags = {}
     for line in inp.splitlines():
         kind, tail = line.split(' bags contain ')
@@ -25,57 +20,48 @@ def day07(inp):
                 children[child_kind] = count
         bags[kind] = Bag(kind, children)
 
-    # create reverse mapping
-    for kind, bag in bags.items():
-        # kind contains bag.contains
-        for child_kind in bag.contains:
-            bags[child_kind].isin.add(kind)
+    # post-processing
+    for bag in bags.values():
+        # replace children as string keys with children as bag keys
+        bag.contents = {bags[k]: v for k, v in bag.contents.items()}
 
-    # part 1: find who might contain
-    root = 'shiny gold'
+        # create reverse mapping
+        for child in bag.contents:
+            bags[child.kind].isin.add(bag)
+
+    # part 1: find who might contain shiny gold (BFS)
+    root = bags['shiny gold']
     to_visit = {root}
     unique_outermosts = set()
     while True:
         next_visit = set()
         for node in to_visit:
             unique_outermosts.add(node)
-            next_visit |= bags[node].isin
+            next_visit |= bags[node.kind].isin
 
         # ignore already seen nodes
         to_visit = next_visit - unique_outermosts
 
         if not to_visit:
             break
+    part1 = len(unique_outermosts) - 1 # ignore ourselves
 
-    part1 = len(unique_outermosts) - 1 # ignore our own
-
-    # part 2: walk contents
-    root = Node('shiny gold', parent=None, count=1)
-    to_visit = {root}
-    # also expect multiple hits of the same bag kind
-
-    leaves = set()
-    tot = 0
+    # part 2: sum up contents of shiny gold, start from leaves
+    root.bag_count = 0  # don't count the root node, only contents
+    leaves = {bag for bag in bags.values() if not bag.contents}
+    remaining_bags = set(bags.values())
     while True:
-        next_visit = set()
-        for node in to_visit:
-            # check for children
-            children = bags[node.kind].contains.items()
-            if not children:
-                leaves.add(node)
-                continue
-
-            for child_kind, cnt in children:
-                child_node = Node(child_kind, parent=node, count=node.count * cnt)
-                tot += child_node.count
-                node.children.add(child_node)
-                next_visit.add(child_node)
-
-        to_visit = next_visit
-        if not to_visit:
+        if root in leaves:
+            part2 = root.bag_count
             break
 
-    part2 = tot
+        for leaf in leaves:
+            for parent in leaf.isin:
+                parent.bag_count += parent.contents[leaf] * leaf.bag_count
+                del parent.contents[leaf]
+
+        remaining_bags -= leaves
+        leaves = {bag for bag in remaining_bags if not bag.contents}
 
     return part1, part2
 
