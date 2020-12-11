@@ -5,8 +5,7 @@ def partition(n):
     """Partition n as the sum of 1, 2, 3"""
     if n == 0:
         return [[]]
-    if n == 1:
-        return [[1]]
+
     partitions = []
     for k in [1, 2, 3]:
         if k > n:
