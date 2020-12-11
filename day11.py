@@ -76,19 +76,13 @@ def day11_part2(inp):
     # iterate, use adjacency information
     last = padded_state.copy()
     for it in count():
-        occupieds = padded_state == 2
-        empties = padded_state == 1
-        next_state = padded_state.copy()
-        for i_seat, (i, j) in enumerate(zip(*seats)):
-            adjacents = padded_state[adj[i_seat, :, 0], adj[i_seat, :, 1]]
-            occ_count = (adjacents == 2).sum()
+        adjacents = padded_state[adj[..., 0], adj[..., 1]]  # shape (n_seats, 8)
+        occ_counts = (adjacents == 2).sum(-1)
+        to_occupy = (padded_state[seats] == 1) & (occ_counts == 0)
+        to_vacate = (padded_state[seats] == 2) & (occ_counts >= 5)
 
-            if empties[i, j] and occ_count == 0:
-                next_state[i, j] = 2
-            if occupieds[i, j] and occ_count >= 5:
-                next_state[i, j] = 1
-
-        padded_state[...] = next_state
+        padded_state[tuple(np.array(seats)[:, to_occupy])] = 2
+        padded_state[tuple(np.array(seats)[:, to_vacate])] = 1
 
         if np.array_equal(padded_state, last):
             res = (padded_state == 2).sum()
