@@ -1,4 +1,4 @@
-def day12(inp):
+def day12(inp, part2=False):
     dat = []
     for row in inp.splitlines():
         sdir = row[0]
@@ -6,7 +6,11 @@ def day12(inp):
 
     # part 1
     pos = 0j
-    orient = 1 + 0j  # east
+    if not part2:
+        orient = 1 + 0j  # east
+    else:
+        orient = 10 + 1j # generic waypoint
+
     for sdir, val in dat:
         if sdir == 'L':
             quarters = val//90
@@ -14,52 +18,27 @@ def day12(inp):
         elif sdir == 'R':
             quarters = val//90
             orient *= (-1j) ** quarters 
-        else:
-            deltas = {'N': 1j, 'E': 1, 'S': -1j, 'W': -1, 'F': orient}
-            delta = deltas[sdir] * val
-            pos += delta
-
-    part1 = int(abs(pos.real) + abs(pos.imag))
-
-    return part1
-    
-
-def day12_part2(inp):
-    dat = []
-    for row in inp.splitlines():
-        sdir = row[0]
-        dat.append((row[0], int(row[1:])))
-
-    # part 2
-    wp = 10 + 1j
-    pos = 0j
-    for sdir, val in dat:
-        if sdir == 'L':
-            quarters = val//90
-            wp *= (1j) ** quarters 
-        elif sdir == 'R':
-            quarters = val//90
-            wp *= (-1j) ** quarters 
         elif sdir == 'F':
-            delta = wp * val
-            pos += delta
+            pos += orient * val
         else:
             deltas = {'N': 1j, 'E': 1, 'S': -1j, 'W': -1}
             delta = deltas[sdir] * val
-            wp += delta
+            if not part2:
+                # move the ship
+                pos += delta
+            else:
+                # move the waypoint
+                orient += delta
 
-    part2 = int(abs(pos.real) + abs(pos.imag))
+    res = int(abs(pos.real) + abs(pos.imag))
 
-    return part2
+    return res
     
 
 if __name__ == "__main__":
     testinp = open('day12.testinp').read()
     print(day12(testinp))
-    print(day12_part2(testinp))
+    print(day12(testinp, part2=True))
     inp = open('day12.inp').read()
     print(day12(inp))
-    print(day12_part2(inp))
-    # part 1:
-    # 434954857400860430790932 too high
-    # 11719 too high
+    print(day12(inp, part2=True))
