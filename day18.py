@@ -1,14 +1,10 @@
 import operator
 from functools import partial
-import string
 
-from pyparsing import infixNotation, oneOf, opAssoc, pyparsing_common
-
-def parse_part1(line):
+def parse(line):
     """Parse a line using the weird rules
 
     Assumption: every literal is a single-digit integer
-
     """
     stack = []
     line = line.strip().replace(' ', '')
@@ -52,27 +48,60 @@ def parse_part1(line):
     return ans
 
 
-def parse_part2(line):
-    """Do part 2 using pyparsing, based on https://stackoverflow.com/a/23956778"""
+def parenthesize(line):
+    """Add parentheses around additions for part 2 (thanks to a tip from @ztane)"""
 
-    def add_toks(s, loc, tokens):
-            return tokens[0][0] + tokens[0][-1]
-    def mul_toks(s, loc, tokens):
-            return tokens[0][0] * tokens[0][-1]
+    line = line.replace(' ', '')
+    num_plusses = line.count('+')
+    last_index = 0
+    transformed = list(line)
+    for _ in range(num_plusses):
+        #next_plus = next(i + last_index for i, c in enumerate(transformed) if c == '+')
+        next_plus = transformed.index('+', last_index)
+        last_index = next_plus + 2
 
-    operand = pyparsing_common.integer
-    expr = infixNotation(operand,
-        [
-        (oneOf('+'), 2, opAssoc.RIGHT, add_toks),
-        (oneOf('*'), 2, opAssoc.RIGHT, mul_toks),
-        ])
+        # add a starting parenthesis
+        if transformed[next_plus - 1] != ')':
+            # previous token is a number, we can just prepend an opening parenthesis
+            insert_index = next_plus - 1
+        else:
+            # we need to find the first opening parenthesis
+            # count parentheses to balance them
+            paren_count = 0
+            for i in range(next_plus - 1, -1, -1):
+                c = transformed[i]
+                if c == ')':
+                    paren_count += 1
+                elif c == '(':
+                    paren_count -= 1
+                    if not paren_count:
+                        insert_index = i
+                        break
+        transformed.insert(insert_index, '(')
+        next_plus += 1
 
-    return expr.parseString(line)[0]
+        # find its matching ending parenthesis
+        if transformed[next_plus + 1] != '(':
+            insert_index = next_plus + 2
+        else:
+            # count parentheses to balance them
+            paren_count = 0
+            for i, c in enumerate(transformed[next_plus + 1 :], start=next_plus + 1):
+                if c == '(':
+                    paren_count += 1
+                elif c == ')':
+                    paren_count -= 1
+                    if not paren_count:
+                        insert_index = i + 1
+                        break
+        transformed.insert(insert_index, ')')
+
+    return ''.join(transformed)
 
 
 def day18(inp):
-    part1 = sum(parse_part1(line) for line in inp.splitlines())
-    part2 = sum(parse_part2(line) for line in inp.splitlines())
+    part1 = sum(parse(line) for line in inp.splitlines())
+    part2 = sum(parse(parenthesize(line)) for line in inp.splitlines())
 
     return part1, part2
 
