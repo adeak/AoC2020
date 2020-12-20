@@ -3,6 +3,12 @@ from textwrap import dedent
 import numpy as np
 from numpy.lib.stride_tricks import as_strided
 
+def edge2bin(edge):
+    """Return a binary number from a 1d boolean array as bitmask."""
+    edgehash = (2**np.arange(edge.size) * edge).sum()
+    return edgehash
+
+
 def day20(inp):
     blocks = inp.strip().split('\n\n')
 
@@ -29,20 +35,18 @@ def day20(inp):
         for edge_index in edge_indices:
             edge = img[edge_index]
             for arr in edge, edge[::-1]:
-                # bool_ -> intp -> str
-                bits = ''.join(arr.astype(int).astype(str))
-                edgehash = int(bits, 2)
+                edgehash = edge2bin(arr)
                 hashes.append(edgehash)
-        edgehashes[imgid] = np.array(hashes), set(hashes)
+        edgehashes[imgid] = set(hashes)
     m = img.shape[0]  # patch linear size
 
     # compare hashes to see who might match with whom
     corners, edges, middles = {}, {}, {}
     neighbours = {}
-    for imgid, (hashes, set_hashes) in edgehashes.items():
-        other_neighbours = {otherid for otherid, (_, other_hashes) in edgehashes.items()
+    for imgid, hashes in edgehashes.items():
+        other_neighbours = {otherid for otherid, other_hashes in edgehashes.items()
                                     for other_hash in other_hashes
-                                    if otherid != imgid and set_hashes & other_hashes
+                                    if otherid != imgid and hashes & other_hashes
                            }
         num_neighbours = len(other_neighbours)
         if num_neighbours == 2:
@@ -57,106 +61,79 @@ def day20(inp):
     # part 1 doesn't actually need us to assemple the map
     part1 = np.prod([*corners])
 
-    # start filling in corners
+    # start filling in tiles from a corner
     # there's legroom for an arbitrary global rotation/flipping
     # so we can put one of the corners anywhere in any configuration
     # without loss of generality
+    #
+    # fill a corner -> some of its neighbours will be new corners -> repeat
 
-    # put the first corner in the top left
-    cornerid, neighbourids = corners.popitem()
-    neighbourids = list(neighbourids)
-    img = imgs[cornerid]
-    hashes, set_hashes = edgehashes[cornerid]
+    # slices for each edge (up, down, left, right):
+    edge_indices = [
+        (0, ...),
+        (-1, ...),
+        (..., 0),
+        (..., -1),
+    ]
+    # corresponding index delta for a neighbour along the same edge:
+    deltas = [
+        [-1, 0],
+        [1, 0],
+        [0, -1],
+        [0, 1],
+    ]
 
-    # figure out which direction it should be in by matching to its two neighbours
-    for neighbourid in neighbourids:
-        # if the neighbour matches to the left or to the top, flip the corner image
-        relevant_indices = [i for i, edgehash in enumerate(hashes) if edgehash in edgehashes[neighbourid][1]]
-
-        # there will be duplication do to synchronised flips, so
-        # only take the first index
-        fixing_index = relevant_indices[0]
-    
-        # fixing index encodes one of the edges (should be bottom or right):
-        # 0, 1 -> top, top flipped
-        # 2, 3 -> bottom, bottom flipped
-        # 4, 5 -> left, left flipped
-        # 6, 7 -> right, right flipped
-
-        fixing_div = fixing_index // 2
-        if fixing_div == 0:
-            # index was 0 or 1 (top)
-            img[...] = img[::-1, :]
-        elif fixing_div == 2:
-            # index was 4 or 5 (left)
-            img[...] = img[:, ::-1]
-
-    # now we can finally but the corner image into the top left
+    cornerid = next(iter(corners))
     pos_indices = {}
-    superimg = np.zeros((n, n, m, m), dtype=bool)
-    pos_indices[cornerid] = np.array([0, 0])
-    superimg[0, 0, ...] = img
-
-    # make our neighbours corners
-    for neighbourid in neighbourids:
-        second_neighbourids = edges.pop(neighbourid)
-        corners[neighbourid] = second_neighbourids
-
+    pos = (0, 0)
+    pos_indices[cornerid] = pos
+    to_visit = neighbours[cornerid]
     found_imgids = {cornerid}
-    to_visit = neighbourids & corners.keys()
     while to_visit:
         imgid = to_visit.pop()
         img = imgs[imgid]
         neighbourids = neighbours[imgid]
 
-        # align this image to its already found neighbours
+        # align this image to its already found neighbour
         fixed_neighbid = next(id for id in neighbourids if id in found_imgids)
-        fixed_neighbpos = pos_indices[fixed_neighbid]
+        fixed_neighbpos = np.array(pos_indices[fixed_neighbid])
 
         # put this image in the superimage
-        # can't be assed to update and decode hashes again,
-        # so just brute force this part
-        matching_hashes = edgehashes[imgid][1] & edgehashes[fixed_neighbid][1]
-        edge_indices = [
-            (0, ...),
-            (-1, ...),
-            (..., 0),
-            (..., -1),
-        ]
-        deltas = [
-            [-1, 0],
-            [1, 0],
-            [0, -1],
-            [0, 1],
-        ]
+        # can't be assed to update and decode hashes again, so just brute force this part
+        matching_hashes = edgehashes[imgid] & edgehashes[fixed_neighbid]
         for i_edge, edge_index in enumerate(edge_indices):
+            # hash the edges again
             neighbedge = imgs[fixed_neighbid][edge_index]
-            bits = ''.join(neighbedge.astype(int).astype(str))
-            edgehash = int(bits, 2)
+            edgehash = edge2bin(neighbedge)
             if edgehash in matching_hashes:
+                # we've found the two matching edges
                 delta = deltas[i_edge]
                 if 0 <= i_edge <= 1:
                     i_edge_other_side = 0 if i_edge == 1 else 1
                 else:
                     i_edge_other_side = 2 if i_edge == 3 else 3
                 break
-        this_edge_index = edge_indices[i_edge_other_side]
-        this_pos = fixed_neighbpos + delta
+        else:
+            raise Exception('Unmatched edge found!')
+
+        # delta gives the index offset of img compared to its known neighbour
+        this_pos = tuple(fixed_neighbpos + delta)
         pos_indices[imgid] = this_pos
+        # i_edge_other_side indexes the slice that corresponds to the overlapping edge on img
+        # loop over every configuration in img until the two edges match in the right place
+        this_edge_index = edge_indices[i_edge_other_side]
         found_orientation = False
         for i_flip in range(2):
             for rot_count in range(4):
-                img[...] = np.rot90(img)
                 if np.array_equal(img[this_edge_index], neighbedge):
                     found_orientation = True
                     break
+                img[...] = np.rot90(img)  # rotate
             if found_orientation:
                 break
-            img[...] = img[::-1, :]
+            img[...] = img[::-1, :]  # flip
         else:
             raise Exception('Unmatched image found!')
-
-        superimg[tuple(this_pos)] = img
 
         # make our neighbours edges and corners if they weren't already
         # and add new corners to the TODO list
@@ -171,6 +148,14 @@ def day20(inp):
                 to_visit.add(neighbourid)
 
         found_imgids.add(imgid)
+
+    # now shift the indices in pos_indices to build the image array
+    # (in whatever configuration it is)
+    superimg = np.zeros((n, n, m, m), dtype=bool)
+    min_i, min_j = min(pos_indices.values())
+    for imgid, (i, j) in pos_indices.items():
+        img = imgs[imgid]
+        superimg[i - min_i, j - min_j, ...] = img
 
     # now the easy part: stitch the images and find the monsters
 
@@ -200,6 +185,8 @@ def day20(inp):
 
             if monster_count:
                 # we've got the right orientation; bail out
+                # assume that monsters don't overlap
+                # and that they are only visible in a single configuration as suggested by the description
                 part2 = superimg.sum() - monster_count * monster_pixels
 
                 return part1, part2
@@ -212,8 +199,5 @@ def day20(inp):
 if __name__ == "__main__":
     testinp = open('day20.testinp').read()
     print(day20(testinp))
-    #testinp2 = open('day20.testinp2').read()
-    #print(day20(testinp2)[1])
     inp = open('day20.inp').read()
     print(day20(inp))
-    # 1085 too low
